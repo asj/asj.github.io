@@ -2,7 +2,6 @@
 <h4>Introduction</h4>
 <p>The current chunk allocator in Btrfs focuses on free space only. It works, but it doesn’t give us enough control in heterogeneous setups—especially when we want to manage performance, fault tolerance, or how space is consumed across devices.</p>
 <p>This document lays out a proposal for a more flexible chunk allocation system. The idea is to let users guide chunk placement using simple policies that map better to real-world hardware setups. We reuse existing fields in <code>btrfs_dev_item</code> and introduce new semantics around roles, priorities, and device groups, with minimal impact on the on-disk format.</p>
-<hr />
 <h4>What’s Broken Today</h4>
 <p>The allocator does the simplest thing: pick the device with the most free space. That’s fine in uniform setups, but creates problems in more complex ones:</p>
 <p><strong>Performance bottlenecks in mixed devices</strong>
@@ -11,7 +10,6 @@ Metadata doesn’t always land on the faster devices. In an SSD + HDD setup, we 
 If you're growing or shrinking a volume, the allocator might spread data across devices even when that’s not what you want. There’s no easy way to fill up one disk and move on to the next, or to balance across disks of uneven sizes.</p>
 <p><strong>No fault domain awareness</strong>
 RAID1 and friends protect against device failure, but not transport failures (e.g., a bad HBA). If both mirrors land on disks behind the same controller, you still lose everything.</p>
-<hr />
 <h4>Why Not Just Detect Performance?</h4>
 <p>Some might ask: why not auto-detect which device is faster?</p>
 <p>The short answer is: it doesn’t work well.</p>
@@ -21,7 +19,6 @@ RAID1 and friends protect against device failure, but not transport failures (e.
 <li>In virtual setups, "rotational" might mean anything.</li>
 </ul>
 <p>Instead, this design proposes letting users set device priorities explicitly. External tools can help determine these at <code>mkfs</code> time or using btrfs properties to make it automatic, but the key idea is: <em>don’t guess, let the admin/tools decide.</em></p>
-<hr />
 <h4>Device Roles and Allocation Priority</h4>
 <p>We’re reusing bits in <code>btrfs_dev_item::type</code> to track allocation preferences. Here's the layout:</p>
 <p><code>c
@@ -56,7 +53,6 @@ struct btrfs_dev_item {
 <p><code>alloc_priority</code>: 0–255; lower means higher priority</p>
 </li>
 </ul>
-<hr />
 <h4>Roles: Controlling What Goes Where</h4>
 <p>We define five device roles:</p>
 <ul>
@@ -72,7 +68,6 @@ struct btrfs_dev_item {
 <p>For data chunks:</p>
 <p><code>data_only -&gt; data -&gt; none -&gt; metadata</code></p>
 <p>These roles must be manually assigned—either via <code>mkfs</code> or with <code>btrfs property</code> at runtime. That gives admins full control.</p>
-<hr />
 <h4>Device Groups: Fault Domain Awareness</h4>
 <p>To help with fault tolerance beyond a single device failure, we introduce <em>device groups</em> via the <code>dev_group</code> field.</p>
 <p>Each device can be assigned a group ID (1–4). The allocator ensures mirrored chunks (RAID1/RAID10/RAID1C*) are placed on devices in different groups.</p>
@@ -80,7 +75,6 @@ struct btrfs_dev_item {
 <p>Usage:</p>
 <p><code>mkfs.btrfs -draid1 -mraid1 sda:ft=1 sdb:ft=1 sdc:ft=2 sdd:ft=2</code></p>
 <p>The <code>dev_group</code> field is used to track this on disk.</p>
-<hr />
 <h4>More Control Over Space Usage</h4>
 <p>We add new allocation strategies for SINGLE and DUP profiles:</p>
 <ul>
@@ -98,11 +92,9 @@ struct btrfs_dev_item {
 </li>
 </ul>
 <p>These modes let users manage their volumes more deliberately.</p>
-<hr />
 <h4>Device ID Considerations</h4>
 <p>Linear allocation depends on devid order. This is mostly assigned by the mkfs and kernel in the order devices are added. So it’s not configurable, but in practice it’s stable: devices retain their devid on replace, and new devices get the highest unused ID.</p>
 <p>We accept this limitation because the benefits are still worth it.</p>
-<hr />
 <h4>Putting It All Together</h4>
 <p>Here’s what we gain from this design:</p>
 <ul>
@@ -127,10 +119,8 @@ struct btrfs_dev_item {
   We avoid estimating device performance from noisy runtime stats.</p>
 </li>
 </ul>
-<hr />
 <h4>Future Directions</h4>
 <p>While this proposal avoids dynamic metrics, it leaves the door open. If reliable performance hints become available—say, from a vendor API or BPF tool—they can populate <code>seek_speed</code> and <code>bandwidth</code> fields in the future.</p>
-<hr />
 <h4>Conclusion</h4>
 <p>This design gives Btrfs users more control without throwing out what already works. It helps solve real-world problems—like poor metadata performance, bad fault domain placement, and lack of flexibility in space usage.</p>
 <p>Admins get tools to guide allocation at mkfs time. And we get a system that works better in the kinds of setups people actually run.</p>
