@@ -18,9 +18,10 @@ RAID1 and friends protect against device failure, but not transport failures (e.
 <li>Vendor performance hints are rare and usually require out-of-band knowledge.</li>
 <li>In virtual setups, "rotational" might mean anything.</li>
 </ul>
-<p>Instead, this design proposes letting users set device priorities explicitly. External tools can help determine these at <code>mkfs</code> time or using btrfs properties to make it automatic, but the key idea is: <em>don’t guess, let the admin/tools decide.</em></p>
+<p>Instead, this design proposes letting users set device priorities explicitly. External tools can help determine these priorities at <code>mkfs</code> time or later using btrfs properties to make it automatic, but the key idea is: <em>noisy iostat or gussing the device performance by type must not be used to make permanent decisions, let the admin/tools decide.</em></p>
 <h4>Device Roles and Allocation Priority</h4>
-<p>We’re reusing bits in <code>btrfs_dev_item::type</code> to track allocation preferences. Here's the layout:</p>
+<p>We introduce allocation priorities. Allocation priority (1-255) determines generic devices order for allocation. The Role describes what a device is best used for (metadata, data, both, or none).</p>
+<p>For this purpose, we’re reusing bits in <code>btrfs_dev_item::type</code> to track allocation preferences. Here's the layout:</p>
 <p><code>c
 struct btrfs_dev_item {
     ...
@@ -54,20 +55,25 @@ struct btrfs_dev_item {
 </li>
 </ul>
 <h4>Roles: Controlling What Goes Where</h4>
-<p>We define five device roles:</p>
-<ul>
-<li><code>metadata_only</code></li>
-<li><code>metadata</code></li>
-<li><code>none</code> (default)</li>
-<li><code>data</code></li>
-<li><code>data_only</code></li>
-</ul>
+<p>Roles:</p>
 <p>These guide allocation. The allocator walks through the roles in order of preference and picks the one with the most free space.</p>
-<p>Example for metadata chunks:</p>
-<p><code>metadata_only -&gt; metadata -&gt; none -&gt; data</code></p>
-<p>For data chunks:</p>
-<p><code>data_only -&gt; data -&gt; none -&gt; metadata</code></p>
-<p>These roles must be manually assigned—either via <code>mkfs</code> or with <code>btrfs property</code> at runtime. That gives admins full control.</p>
+<pre><code>metadata_only: only metadata chunks go here
+
+metadata: metadata preferred
+
+none: no preference (default)
+
+data: data preferred
+
+data_only: only data chunks go here
+</code></pre>
+<p>Chunks are allocated according to a role-based order. For metadata:</p>
+<pre><code>metadata_only -&gt; metadata -&gt; none -&gt; data -&gt; data_only
+</code></pre>
+<p>For data:</p>
+<pre><code>data_only -&gt; data -&gt; none -&gt; metadata -&gt; metadata_only
+</code></pre>
+<p>These roles must be manually assigned either via <code>mkfs</code> or with <code>btrfs property</code> at runtime. Or we could develop an external tool to list the devices in the order of their perforamnce and then pass it to the mkfs/btrfs-properties. That gives admins full control.</p>
 <h4>Device Groups: Fault Domain Awareness</h4>
 <p>To help with fault tolerance beyond a single device failure, we introduce <em>device groups</em> via the <code>dev_group</code> field.</p>
 <p>Each device can be assigned a group ID (1–4). The allocator ensures mirrored chunks (RAID1/RAID10/RAID1C*) are placed on devices in different groups.</p>

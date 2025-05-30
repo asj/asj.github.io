@@ -36,7 +36,9 @@ Instead, this design proposes letting users set device priorities explicitly. Ex
 
 #### Device Roles and Allocation Priority
 
-We’re reusing bits in `btrfs_dev_item::type` to track allocation preferences. Here's the layout:
+We introduce allocation priorities. Allocation priority (1-255) determines generic devices order for allocation. The Role describes what a device is best used for (metadata, data, both, or none).
+
+For this purpose, we’re reusing bits in `btrfs_dev_item::type` to track allocation preferences. Here's the layout:
 
 ```c
 struct btrfs_dev_item {
@@ -68,29 +70,29 @@ struct btrfs_dev_item {
 
 #### Roles: Controlling What Goes Where
 
-We define five device roles:
-
-* `metadata_only`
-* `metadata`
-* `none` (default)
-* `data`
-* `data_only`
+Roles:
 
 These guide allocation. The allocator walks through the roles in order of preference and picks the one with the most free space.
 
-Example for metadata chunks:
+    metadata_only: only metadata chunks go here
 
-```
-metadata_only -> metadata -> none -> data
-```
+    metadata: metadata preferred
 
-For data chunks:
+    none: no preference (default)
 
-```
-data_only -> data -> none -> metadata
-```
+    data: data preferred
 
-These roles must be manually assigned—either via `mkfs` or with `btrfs property` at runtime. That gives admins full control.
+    data_only: only data chunks go here
+
+Chunks are allocated according to a role-based order. For metadata:
+
+    metadata_only -> metadata -> none -> data -> data_only
+
+For data:
+
+    data_only -> data -> none -> metadata -> metadata_only
+
+These roles must be manually assigned either via `mkfs` or with `btrfs property` at runtime. Or we could develop an external tool to list the devices in the order of their perforamnce and then pass it to the mkfs/btrfs-properties. That gives admins full control.
 
 
 #### Device Groups: Fault Domain Awareness
