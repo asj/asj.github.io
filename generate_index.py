@@ -24,7 +24,7 @@ with open("index.html", "w") as f:
   <title>Index</title>
   <style>
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: "Cambria (Body)", Cambria, serif;
       max-width: 700px;
       margin: 3em auto;
       padding: 0 1em;
@@ -56,3 +56,20 @@ with open("index.html", "w") as f:
   <ul>
 """)
 
+    for entry in entries:
+        if is_ignored(entry):
+            continue
+
+        if entry.endswith('.md'):
+            html_file = convert_markdown_to_html(entry)
+            label = display_name(entry)
+            f.write(f'    <li><a href="{html_file}">{label}</a></li>\n')
+        elif not entry.endswith('.html'):
+            href = entry + "/" if os.path.isdir(entry) else entry
+            label = display_name(entry)
+            f.write(f'    <li><a href="{href}">{label}</a></li>\n')
+
+    f.write("""  </ul>
+</body>
+</html>
+""")
