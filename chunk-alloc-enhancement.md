@@ -31,7 +31,7 @@ The short answer is: it doesn’t work well.
 * Vendor performance hints are rare and usually require out-of-band knowledge.
 * In virtual setups, "rotational" might mean anything.
 
-Instead, this design proposes letting users set device priorities explicitly. External tools can help determine these at `mkfs` time or using btrfs properties to make it automatic, but the key idea is: *don’t guess, let the admin/tools decide.*
+Instead, this design proposes letting users set device priorities explicitly. External tools can help determine these priorities at `mkfs` time or later using btrfs properties to make it automatic, but the key idea is: *noisy iostat or gussing the device performance by type must not be used to make permanent decisions, let the admin/tools decide.*
 
 
 #### Device Roles and Allocation Priority
