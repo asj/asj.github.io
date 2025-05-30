@@ -22,8 +22,7 @@ RAID1 and friends protect against device failure, but not transport failures (e.
 <h4>Device Roles and Allocation Priority</h4>
 <p>We introduce allocation priorities. Allocation priority (1-255) determines generic devices order for allocation. The Role describes what a device is best used for (metadata, data, both, or none).</p>
 <p>For this purpose, we’re reusing bits in <code>btrfs_dev_item::type</code> to track allocation preferences. Here's the layout:</p>
-<p><code>c
-struct btrfs_dev_item {
+<p><code>struct btrfs_dev_item {
     ...
     union {
         __le64 type;
@@ -39,19 +38,17 @@ struct btrfs_dev_item {
 <ul>
 <li>
 <p><code>alloc_mode</code>: defines how this device participates in allocation (bitmask)</p>
-</li>
-<li>
-<p><code>FREE_SPACE</code>: legacy</p>
-</li>
+<ul>
+<li><code>FREE_SPACE</code>: legacy</li>
 <li><code>ROLE</code>: honor role bits</li>
 <li><code>PRIORITY</code>: use raw alloc_priority</li>
 <li><code>LINEAR</code>: sequential allocation</li>
 <li><code>ROUND-ROBIN</code>: pick the next device</li>
-<li>
-<p><code>FT_GROUP</code>: use dev_group for fault domains</p>
+<li><code>FT_GROUP</code>: use dev_group for fault domains</li>
+</ul>
 </li>
 <li>
-<p><code>alloc_priority</code>: 0–255; lower means higher priority</p>
+<p><code>alloc_priority</code>: 1–255; lower means higher priority</p>
 </li>
 </ul>
 <h4>Roles: Controlling What Goes Where</h4>

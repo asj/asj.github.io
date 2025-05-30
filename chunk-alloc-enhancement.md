@@ -40,7 +40,7 @@ We introduce allocation priorities. Allocation priority (1-255) determines gener
 
 For this purpose, we’re reusing bits in `btrfs_dev_item::type` to track allocation preferences. Here's the layout:
 
-```c
+```
 struct btrfs_dev_item {
     ...
     union {
@@ -58,14 +58,14 @@ struct btrfs_dev_item {
 
 * `alloc_mode`: defines how this device participates in allocation (bitmask)
 
-  * `FREE_SPACE`: legacy
-  * `ROLE`: honor role bits
-  * `PRIORITY`: use raw alloc\_priority
-  * `LINEAR`: sequential allocation
-  * `ROUND-ROBIN`: pick the next device
-  * `FT_GROUP`: use dev\_group for fault domains
+      * `FREE_SPACE`: legacy
+      * `ROLE`: honor role bits
+      * `PRIORITY`: use raw alloc\_priority
+      * `LINEAR`: sequential allocation
+      * `ROUND-ROBIN`: pick the next device
+      * `FT_GROUP`: use dev\_group for fault domains
 
-* `alloc_priority`: 0–255; lower means higher priority
+* `alloc_priority`: 1–255; lower means higher priority
 
 
 #### Roles: Controlling What Goes Where
