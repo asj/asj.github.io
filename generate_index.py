@@ -12,22 +12,29 @@ def convert_markdown_to_html(md_file):
     return html_file
 
 def display_name(entry):
-    name = os.path.splitext(entry)[0]
-    return name + '/' if os.path.isdir(entry) else name
+    return os.path.splitext(entry)[0] if not os.path.isdir(entry) else entry + '/'
 
+# Scan directory and collect entries
+entries = sorted(os.listdir("."))
+
+# Prepare index.html
 with open("index.html", "w") as f:
     f.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Index</title></head><body><h1>Files</h1><ul>\n")
 
-    for entry in sorted(os.listdir(".")):
+    for entry in entries:
         if is_ignored(entry):
             continue
 
-        # Handle markdown conversion
+        # Handle markdown conversion and link to HTML version only
         if entry.endswith('.md'):
             html_file = convert_markdown_to_html(entry)
-            href = html_file
-        else:
-            href = entry + "/" if os.path.isdir(entry) else entry
+            label = display_name(entry)
+            f.write(f"<li><a href=\"{html_file}\">{label}</a></li>\n")
 
-        label = display_name(entry)
-        f.write(f"<li><a href=\"{href}\">{label}</a></li>\n")
+        elif not entry.endswith('.html'):  # Skip raw .html files like index.html itself
+            href = entry + "/" if os.path.isdir(entry) else entry
+            label = display_name(entry)
+            f.write(f"<li><a href=\"{href}\">{label}</a></li>\n")
+
+    f.write("</ul></body></html>\n")
+
