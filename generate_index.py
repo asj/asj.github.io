@@ -8,7 +8,8 @@ def is_ignored(entry):
 
 def convert_markdown_to_html(md_file):
     html_file = os.path.splitext(md_file)[0] + '.html'
-    subprocess.run(['python3', '-m', 'markdown', md_file], stdout=open(html_file, 'w'))
+    with open(html_file, 'w') as out:
+        subprocess.run(['pandoc', md_file, '-f', 'markdown', '-t', 'html'], stdout=out)
     return html_file
 
 def display_name(entry):
@@ -73,3 +74,4 @@ with open("index.html", "w") as f:
 </body>
 </html>
 """)
+

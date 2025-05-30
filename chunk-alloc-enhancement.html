@@ -1,129 +1,239 @@
-<h3>Btrfs: Enhanced Chunk Allocation with Device Roles, Groups, and Priority</h3>
-<h4>Introduction</h4>
-<p>The current chunk allocator in Btrfs focuses on free space only. It works, but it doesn’t give us enough control in heterogeneous setups—especially when we want to manage performance, fault tolerance, or how space is consumed across devices.</p>
-<p>This document lays out a proposal for a more flexible chunk allocation system. The idea is to let users guide chunk placement using simple policies that map better to real-world hardware setups. We reuse existing fields in <code>btrfs_dev_item</code> and introduce new semantics around roles, priorities, and device groups, with minimal impact on the on-disk format.</p>
-<h4>What’s Broken Today</h4>
-<p>The allocator does the simplest thing: pick the device with the most free space. That’s fine in uniform setups, but creates problems in more complex ones:</p>
-<p><strong>Performance bottlenecks in mixed devices</strong>
-Metadata doesn’t always land on the faster devices. In an SSD + HDD setup, we want metadata on the SSD and data on the HDD. Today, we can’t enforce that.</p>
-<p><strong>Awkward space usage in SINGLE/DUP</strong>
-If you're growing or shrinking a volume, the allocator might spread data across devices even when that’s not what you want. There’s no easy way to fill up one disk and move on to the next, or to balance across disks of uneven sizes.</p>
-<p><strong>No fault domain awareness</strong>
-RAID1 and friends protect against device failure, but not transport failures (e.g., a bad HBA). If both mirrors land on disks behind the same controller, you still lose everything.</p>
-<h4>Why Not Just Detect Performance?</h4>
-<p>Some might ask: why not auto-detect which device is faster?</p>
-<p>The short answer is: it doesn’t work well.</p>
-<ul>
-<li>Latency data (iostat etc.) is noisy and not reliable for permanent decisions.</li>
-<li>Vendor performance hints are rare and usually require out-of-band knowledge.</li>
-<li>In virtual setups, "rotational" might mean anything.</li>
-</ul>
-<p>Instead, this design proposes letting users set device priorities explicitly. External tools can help determine these priorities at <code>mkfs</code> time or later using btrfs properties to make it automatic, but the key idea is: <em>noisy iostat or gussing the device performance by type must not be used to make permanent decisions, let the admin/tools decide.</em></p>
-<h4>Device Roles and Allocation Priority</h4>
-<p>We introduce allocation priorities. Allocation priority (1-255) determines generic devices order for allocation. The Role describes what a device is best used for (metadata, data, both, or none).</p>
-<p>For this purpose, we’re reusing bits in <code>btrfs_dev_item::type</code> to track allocation preferences. Here's the layout:</p>
-<p><code>struct btrfs_dev_item {
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Btrfs: Enhanced Chunk Allocation</title>
+  <style>
+    body {
+      font-family: "Cambria (Body)", Cambria, serif;
+      max-width: 800px;
+      margin: 3em auto;
+      padding: 1em;
+      background-color: #fff;
+      color: #222;
+      line-height: 1.6;
+      text-align: justify;
+    }
+    h1, h2, h3, h4 {
+      font-weight: normal;
+      margin-top: 2em;
+    }
+    p {
+      text-indent: 2em;
+      margin-bottom: 1em;
+    }
+    pre, code {
+      background-color: #f4f4f4;
+      padding: 0.4em;
+      display: block;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    ul {
+      margin-left: 2em;
+    }
+    li {
+      margin-bottom: 0.5em;
+    }
+  </style>
+</head>
+<body>
+
+  <h3>Btrfs: Enhanced Chunk Allocation with Device Roles, Groups, and Priority</h3>
+
+  <h4>Introduction</h4>
+
+  <p>
+    The current chunk allocator in Btrfs focuses on free space only. It works, but it doesn't give us enough control in heterogeneous setups especially when we want to manage performance, fault tolerance, or how space is consumed across devices.
+  </p>
+
+  <p>
+    This document lays out a proposal for a more flexible chunk allocation system. The idea is to let users guide chunk placement using simple policies that map better to real-world hardware setups. We reuse existing fields in <code>btrfs_dev_item</code> and introduce new semantics around roles, priorities, and device groups, with minimal impact on the on-disk format.
+  </p>
+
+  <h4>Whatâs Broken Today</h4>
+
+  <p>
+    The allocator does the simplest thing: pick the device with the most free space. Thatâs fine in uniform setups, but creates problems in more complex ones:
+  </p>
+
+  <p><strong>Performance bottlenecks in mixed devices</strong></p>
+  <p>
+    Metadata doesnât always land on the faster devices. In an SSD + HDD setup, we want metadata on the SSD and data on the HDD. Today, we canât enforce that.
+  </p>
+
+  <p><strong>Awkward space usage in SINGLE/DUP</strong></p>
+  <p>
+    If you're growing or shrinking a volume, the allocator might spread data across devices even when thatâs not what you want. Thereâs no easy way to fill up one disk and move on to the next, or to balance across disks of uneven sizes.
+  </p>
+
+  <p><strong>No fault domain awareness</strong></p>
+  <p>
+    RAID1 and friends protect against device failure, but not transport failures (e.g., a bad HBA). If both mirrors land on disks behind the same controller, you still lose everything.
+  </p>
+
+  <h4>Why Not Just Detect Performance?</h4>
+
+  <p>
+    Some might ask: why not auto-detect which device is faster?
+  </p>
+
+  <p>
+    The short answer is: it doesnât work well.
+  </p>
+
+  <ul>
+    <li>Latency data (iostat etc.) is noisy and not reliable for permanent decisions.</li>
+    <li>Vendor performance hints are rare and usually require out-of-band knowledge.</li>
+    <li>In virtual setups, "rotational" might mean anything.</li>
+  </ul>
+
+  <p>
+    Instead, this design proposes letting users set device priorities explicitly. External tools can help determine these priorities at <code>mkfs</code> time or later using btrfs properties to make it automatic, but the key idea is: <em>noisy iostat or guessing the device performance by type must not be used to make permanent decisions, let the admin/tools decide.</em>
+  </p>
+
+  <h4>Device Roles and Allocation Priority</h4>
+
+  <p>
+    We introduce allocation priorities. Allocation priority (1â255) determines generic devices order for allocation. The Role describes what a device is best used for (metadata, data, both, or none).
+  </p>
+
+  <p>
+    For this purpose, weâre reusing bits in <code>btrfs_dev_item::type</code> to track allocation preferences. Here's the layout:
+  </p>
+
+  <pre>
+struct btrfs_dev_item {
     ...
     union {
         __le64 type;
         struct {
             __le8 reserved[6];
-            __le8 alloc_mode;     /* bits 8–15: mode */
-            __le8 alloc_priority; /* bits 0–7: priority */
+            __le8 alloc_mode;     /* bits 8â15: mode */
+            __le8 alloc_priority; /* bits 0â7: priority */
         };
     };
     __le32 dev_group;
     ...
-};</code></p>
-<ul>
-<li>
-<p><code>alloc_mode</code>: defines how this device participates in allocation (bitmask)</p>
-<ul>
-<li><code>FREE_SPACE</code>: legacy</li>
-<li><code>ROLE</code>: honor role bits</li>
-<li><code>PRIORITY</code>: use raw alloc_priority</li>
-<li><code>LINEAR</code>: sequential allocation</li>
-<li><code>ROUND-ROBIN</code>: pick the next device</li>
-<li><code>FT_GROUP</code>: use dev_group for fault domains</li>
-</ul>
-</li>
-<li>
-<p><code>alloc_priority</code>: 1–255; lower means higher priority</p>
-</li>
-</ul>
-<h4>Roles: Controlling What Goes Where</h4>
-<p>Roles:</p>
-<p>These guide allocation. The allocator walks through the roles in order of preference and picks the one with the most free space.</p>
-<pre><code>metadata_only: only metadata chunks go here
+};
+  </pre>
 
-metadata: metadata preferred
+  <ul>
+    <li><code>alloc_mode</code>: defines how this device participates in allocation (bitmask)
+      <ul>
+        <li><code>FREE_SPACE</code>: legacy</li>
+        <li><code>ROLE</code>: honor role bits</li>
+        <li><code>PRIORITY</code>: use raw <code>alloc_priority</code></li>
+        <li><code>LINEAR</code>: sequential allocation</li>
+        <li><code>ROUND-ROBIN</code>: pick the next device</li>
+        <li><code>FT_GROUP</code>: use <code>dev_group</code> for fault domains</li>
+      </ul>
+    </li>
+    <li><code>alloc_priority</code>: 1â255; lower means higher priority</li>
+  </ul>
 
-none: no preference (default)
+  <h4>Roles: Controlling What Goes Where</h4>
 
-data: data preferred
+  <p>
+    These guide allocation. The allocator walks through the roles in order of preference and picks the one with the most free space.
+  </p>
 
-data_only: only data chunks go here
-</code></pre>
-<p>Chunks are allocated according to a role-based order. For metadata:</p>
-<pre><code>metadata_only -&gt; metadata -&gt; none -&gt; data -&gt; data_only
-</code></pre>
-<p>For data:</p>
-<pre><code>data_only -&gt; data -&gt; none -&gt; metadata -&gt; metadata_only
-</code></pre>
-<p>These roles must be manually assigned either via <code>mkfs</code> or with <code>btrfs property</code> at runtime. Or we could develop an external tool to list the devices in the order of their perforamnce and then pass it to the mkfs/btrfs-properties. That gives admins full control.</p>
-<h4>Device Groups: Fault Domain Awareness</h4>
-<p>To help with fault tolerance beyond a single device failure, we introduce <em>device groups</em> via the <code>dev_group</code> field.</p>
-<p>Each device can be assigned a group ID (1–4). The allocator ensures mirrored chunks (RAID1/RAID10/RAID1C*) are placed on devices in different groups.</p>
-<p>This avoids putting both mirrors on disks behind the same HBA.</p>
-<p>Usage:</p>
-<p><code>mkfs.btrfs -draid1 -mraid1 sda:ft=1 sdb:ft=1 sdc:ft=2 sdd:ft=2</code></p>
-<p>The <code>dev_group</code> field is used to track this on disk.</p>
-<h4>More Control Over Space Usage</h4>
-<p>We add new allocation strategies for SINGLE and DUP profiles:</p>
-<ul>
-<li>
-<p><strong>Linear allocation (by devid)</strong>
-  Fill the lowest devid until full, then move to the next. Simple, predictable. Helpful for adding temporary space.</p>
-</li>
-<li>
-<p><strong>Round-robin</strong>
-  Distribute chunks evenly across all devices.</p>
-</li>
-<li>
-<p><strong>Heterogeneous performance-aware</strong>
-  Use role-based preference: metadata to fast devices, data to slow ones. Falls back to free space when needed.</p>
-</li>
-</ul>
-<p>These modes let users manage their volumes more deliberately.</p>
-<h4>Device ID Considerations</h4>
-<p>Linear allocation depends on devid order. This is mostly assigned by the mkfs and kernel in the order devices are added. So it’s not configurable, but in practice it’s stable: devices retain their devid on replace, and new devices get the highest unused ID.</p>
-<p>We accept this limitation because the benefits are still worth it.</p>
-<h4>Putting It All Together</h4>
-<p>Here’s what we gain from this design:</p>
-<ul>
-<li>
-<p><strong>Better performance</strong>
-  Metadata lands on SSDs or NVMe, where it belongs. Data lands on slower devices if needed.</p>
-</li>
-<li>
-<p><strong>Improved fault tolerance</strong>
-  No more losing both mirrors to a bad cable or failed HBA.</p>
-</li>
-<li>
-<p><strong>More control</strong>
-  Admins can decide how data is spread—or not spread—across disks.</p>
-</li>
-<li>
-<p><strong>Minimal on-disk changes</strong>
-  We reuse fields already present in <code>btrfs_dev_item</code>.</p>
-</li>
-<li>
-<p><strong>No magic auto-detection</strong>
-  We avoid estimating device performance from noisy runtime stats.</p>
-</li>
-</ul>
-<h4>Future Directions</h4>
-<p>While this proposal avoids dynamic metrics, it leaves the door open. If reliable performance hints become available—say, from a vendor API or BPF tool—they can populate <code>seek_speed</code> and <code>bandwidth</code> fields in the future.</p>
-<h4>Conclusion</h4>
-<p>This design gives Btrfs users more control without throwing out what already works. It helps solve real-world problems—like poor metadata performance, bad fault domain placement, and lack of flexibility in space usage.</p>
-<p>Admins get tools to guide allocation at mkfs time. And we get a system that works better in the kinds of setups people actually run.</p>
+  <ul>
+    <li><code>metadata_only</code>: only metadata chunks go here</li>
+    <li><code>metadata</code>: metadata preferred</li>
+    <li><code>none</code>: no preference (default)</li>
+    <li><code>data</code>: data preferred</li>
+    <li><code>data_only</code>: only data chunks go here</li>
+  </ul>
+
+  <p>Chunks are allocated according to a role-based order. For metadata:</p>
+
+  <pre>
+metadata_only â metadata â none â data â data_only
+  </pre>
+
+  <p>For data:</p>
+
+  <pre>
+data_only â data â none â metadata â metadata_only
+  </pre>
+
+  <p>
+    These roles must be manually assigned either via <code>mkfs</code> or with <code>btrfs property</code> at runtime. Or we could develop an external tool to list the devices in the order of their performance and then pass it to the mkfs/btrfs-properties. That gives admins full control.
+  </p>
+
+  <h4>Device Groups: Fault Domain Awareness</h4>
+
+  <p>
+    To help with fault tolerance beyond a single device failure, we introduce <em>device groups</em> via the <code>dev_group</code> field.
+  </p>
+
+  <p>
+    Each device can be assigned a group ID (1â4). The allocator ensures mirrored chunks (RAID1/RAID10/RAID1C*) are placed on devices in different groups.
+  </p>
+
+  <p>This avoids putting both mirrors on disks behind the same HBA.</p>
+
+  <p>Usage:</p>
+
+  <pre>
+mkfs.btrfs -draid1 -mraid1 sda:ft=1 sdb:ft=1 sdc:ft=2 sdd:ft=2
+  </pre>
+
+  <p>The <code>dev_group</code> field is used to track this on disk.</p>
+
+  <h4>More Control Over Space Usage</h4>
+
+  <p>
+    We add new allocation strategies for SINGLE and DUP profiles:
+  </p>
+
+  <ul>
+    <li><strong>Linear allocation (by devid)</strong>: Fill the lowest devid until full, then move to the next. Simple, predictable. Helpful for adding temporary space.</li>
+    <li><strong>Round-robin</strong>: Distribute chunks evenly across all devices.</li>
+    <li><strong>Heterogeneous performance-aware</strong>: Use role-based preference: metadata to fast devices, data to slow ones. Falls back to free space when needed.</li>
+  </ul>
+
+  <p>These modes let users manage their volumes more deliberately.</p>
+
+  <h4>Device ID Considerations</h4>
+
+  <p>
+    Linear allocation depends on devid order. This is mostly assigned by the mkfs and kernel in the order devices are added. So itâs not configurable, but in practice itâs stable: devices retain their devid on replace, and new devices get the highest unused ID.
+  </p>
+
+  <p>We accept this limitation because the benefits are still worth it.</p>
+
+  <h4>Putting It All Together</h4>
+
+  <p>
+    Hereâs what we gain from this design:
+  </p>
+
+  <ul>
+    <li><strong>Better performance</strong>: Metadata lands on SSDs or NVMe, where it belongs. Data lands on slower devices if needed.</li>
+    <li><strong>Improved fault tolerance</strong>: No more losing both mirrors to a bad cable or failed HBA.</li>
+    <li><strong>More control</strong>: Admins can decide how data is spreadâor not spreadâacross disks.</li>
+    <li><strong>Minimal on-disk changes</strong>: We reuse fields already present in <code>btrfs_dev_item</code>.</li>
+    <li><strong>No magic auto-detection</strong>: We avoid estimating device performance from noisy runtime stats.</li>
+  </ul>
+
+  <h4>Future Directions</h4>
+
+  <p>
+    While this proposal avoids dynamic metrics, it leaves the door open. If reliable performance hints become availableâsay, from a vendor API or BPF toolâthey can populate <code>seek_speed</code> and <code>bandwidth</code> fields in the future.
+  </p>
+
+  <h4>Conclusion</h4>
+
+  <p>
+    This design gives Btrfs users more control without throwing out what already works. It helps solve real-world problemsâlike poor metadata performance, bad fault domain placement, and lack of flexibility in space usage.
+  </p>
+
+  <p>
+    Admins get tools to guide allocation at mkfs time. And we get a system that works better in the kinds of setups people actually run.
+  </p>
+
+</body>
+</html>
+

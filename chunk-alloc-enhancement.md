@@ -41,19 +41,19 @@ We introduce allocation priorities. Allocation priority (1-255) determines gener
 For this purpose, we’re reusing bits in `btrfs_dev_item::type` to track allocation preferences. Here's the layout:
 
 ```
-struct btrfs_dev_item {
-    ...
-    union {
-        __le64 type;
-        struct {
-            __le8 reserved[6];
-            __le8 alloc_mode;     /* bits 8–15: mode */
-            __le8 alloc_priority; /* bits 0–7: priority */
+    struct btrfs_dev_item {
+        ...
+        union {
+            __le64 type;
+            struct {
+                __le8 reserved[6];
+                __le8 alloc_mode;     /* bits 8–15: mode */
+                __le8 alloc_priority; /* bits 0–7: priority */
+            };
         };
+        __le32 dev_group;
+        ...
     };
-    __le32 dev_group;
-    ...
-};
 ```
 
 * `alloc_mode`: defines how this device participates in allocation (bitmask)
