@@ -6,7 +6,6 @@ The current chunk allocator in Btrfs focuses on free space only. It works, but i
 
 This document lays out a proposal for a more flexible chunk allocation system. The idea is to let users guide chunk placement using simple policies that map better to real-world hardware setups. We reuse existing fields in `btrfs_dev_item` and introduce new semantics around roles, priorities, and device groups, with minimal impact on the on-disk format.
 
----
 
 #### What’s Broken Today
 
@@ -21,7 +20,6 @@ If you're growing or shrinking a volume, the allocator might spread data across 
 **No fault domain awareness**
 RAID1 and friends protect against device failure, but not transport failures (e.g., a bad HBA). If both mirrors land on disks behind the same controller, you still lose everything.
 
----
 
 #### Why Not Just Detect Performance?
 
@@ -35,7 +33,6 @@ The short answer is: it doesn’t work well.
 
 Instead, this design proposes letting users set device priorities explicitly. External tools can help determine these at `mkfs` time or using btrfs properties to make it automatic, but the key idea is: *don’t guess, let the admin/tools decide.*
 
----
 
 #### Device Roles and Allocation Priority
 
@@ -68,7 +65,6 @@ struct btrfs_dev_item {
 
 * `alloc_priority`: 0–255; lower means higher priority
 
----
 
 #### Roles: Controlling What Goes Where
 
@@ -96,7 +92,6 @@ data_only -> data -> none -> metadata
 
 These roles must be manually assigned—either via `mkfs` or with `btrfs property` at runtime. That gives admins full control.
 
----
 
 #### Device Groups: Fault Domain Awareness
 
@@ -114,7 +109,6 @@ mkfs.btrfs -draid1 -mraid1 sda:ft=1 sdb:ft=1 sdc:ft=2 sdd:ft=2
 
 The `dev_group` field is used to track this on disk.
 
----
 
 #### More Control Over Space Usage
 
@@ -131,7 +125,6 @@ We add new allocation strategies for SINGLE and DUP profiles:
 
 These modes let users manage their volumes more deliberately.
 
----
 
 #### Device ID Considerations
 
@@ -139,7 +132,6 @@ Linear allocation depends on devid order. This is mostly assigned by the mkfs an
 
 We accept this limitation because the benefits are still worth it.
 
----
 
 #### Putting It All Together
 
@@ -160,13 +152,11 @@ Here’s what we gain from this design:
 * **No magic auto-detection**
   We avoid estimating device performance from noisy runtime stats.
 
----
 
 #### Future Directions
 
 While this proposal avoids dynamic metrics, it leaves the door open. If reliable performance hints become available—say, from a vendor API or BPF tool—they can populate `seek_speed` and `bandwidth` fields in the future.
 
----
 
 #### Conclusion
 
